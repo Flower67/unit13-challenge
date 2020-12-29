@@ -12,7 +12,6 @@ def parse_int(n):
     except ValueError:
         return float("nan")
 
-
 def build_validation_result(is_valid, violated_slot, message_content):
     """
     Define a result message structured as Lex response.
@@ -79,26 +78,43 @@ def close(session_attributes, fulfillment_state, message):
 
     return response
 
-
 ### Intents Handlers ###
 def recommend_portfolio(intent_request):
     """
     Performs dialog management and fulfillment for recommending a portfolio.
     """
-
+    # Gets slots' values
     first_name = get_slots(intent_request)["firstName"]
     age = get_slots(intent_request)["age"]
     investment_amount = get_slots(intent_request)["investmentAmount"]
     risk_level = get_slots(intent_request)["riskLevel"]
+    
+    # Gets the invocation source, for Lex dialogs "DialogCodeHook" is expected.
     source = intent_request["invocationSource"]
 
     if source == "DialogCodeHook":
         # Perform basic validation on the supplied input slots.
-        # Use the elicitSlot dialog action to re-prompt
         # for the first violation detected.
+        
+        ### YOUR DATA VALIDATION CODE STARTS HERE
+        
+        #Get all slots
+        slots = get_slots(intent_request)
 
-        ### YOUR DATA VALIDATION CODE STARTS HERE ###
-
+        # Validate user's input using the validate_data function
+        validation_result = validate_data(age, investment_amount)
+        
+        # Use the elicitSlot dialog action to re-prompt
+        if not validation_result["isValid"]:
+            slots[validation_result["violatedSlot"]] = None 
+            return elicit_slot(
+                intent_request["sessionAttributes"],
+                intent_request["currentIntent"]["name"],
+                slots,
+                validation_result["violatedSlot"],
+                validation_result["message"],
+            )
+        
         ### YOUR DATA VALIDATION CODE ENDS HERE ###
 
         # Fetch current session attibutes
@@ -109,7 +125,9 @@ def recommend_portfolio(intent_request):
     # Get the initial investment recommendation
 
     ### YOUR FINAL INVESTMENT RECOMMENDATION CODE STARTS HERE ###
-
+    
+    initial_recommendation = get_investment_recommendation(risk_level)
+    
     ### YOUR FINAL INVESTMENT RECOMMENDATION CODE ENDS HERE ###
 
     # Return a message with the initial recommendation based on the risk level.
@@ -118,13 +136,72 @@ def recommend_portfolio(intent_request):
         "Fulfilled",
         {
             "contentType": "PlainText",
-            "content": """{} thank you for your information;
+            "content": """{} Thank you for your information;
             based on the risk level you defined, my recommendation is to choose an investment portfolio with {}
             """.format(
                 first_name, initial_recommendation
             ),
         },
     )
+
+### Data Validation ###
+def validate_data(age, investment_amount):
+    age = parse_int(age)
+    investment_amount = parse_int(investment_amount)
+    # Validate user age data, should be between 1 and 64
+    if age is None:
+        return build_validation_result(
+            False,
+            "age",
+            "You must provide your age to use this service. "
+            "Please provide your age."
+        )
+    elif age <= 0:
+        age = relativedelta(datetime.now()).years
+        return build_validation_result(
+            False,
+            'age',
+            "You must be at least 1 years old to use this service. "
+            "Please provide a different age.")
+    elif age >= 65:
+        return build_validation_result(
+            False,
+            "age",
+            "To use this service, you must not be 65 and older. "
+            "Please provide a different age.")
+    # Validate user investment amount data, should be > 5000
+    elif investment_amount is None:
+        return build_validation_result(
+            False,
+            "investmentAmount",
+            "The investment amount should be equal to or greater than 5000. "
+            "Please provide an investment amount.")
+    elif investment_amount < 5000:
+        return build_validation_result(
+            False,
+            "investmentAmount",
+            "The investment amount should be equal to or greater than 5000. "
+            "Please provide a different investment amount.")
+    
+    # True results are returned if age and investment amount are valid
+    return build_validation_result(True, None, None)
+
+def get_investment_recommendation(risk_level):
+    
+    if risk_level == None:
+        return "100% bonds (AGG), 0% equities (SPY)",
+    elif risk_level == "Very Low":
+        return "80% bonds (AGG), 20% equities (SPY)",
+    elif risk_level == "Low":
+        return "60% bonds (AGG), 40% equities (SPY)"
+    elif risk_level == "Medium":
+        return "40% bonds (AGG), 60% equities (SPY)"
+    elif risk_level == "High":
+        return "20% bonds (AGG), 80% equities (SPY)"
+    elif risk_level == "Very High":
+        return "0% bonds (AGG), 100% equities (SPY)"
+    else:
+        return None
 
 
 ### Intents Dispatcher ###
